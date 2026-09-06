@@ -141,6 +141,33 @@ class HybridRanker:
         self._load()
         return self._embeddings is not None or self._codes is not None
 
+    def _taste_center(
+        self,
+        _vecs,
+        repeat_raw: Dict[int, float],
+        played_emb_ids: List[int],
+        id_to_idx: Dict[int, int],
+    ) -> np.ndarray:
+        """Decay-weighted taste center, broadened by exploration.
+
+        w_i = decay_score(item_i) + eps; center = sum(w_i * emb_i) / sum(w_i).
+        Exploration blends toward the uniform mean of played vectors:
+        high exploration → broader taste (more diverse discovery).
+        """
+        vecs = _vecs(played_emb_ids)  # (p, d)
+        w = np.array(
+            [repeat_raw.get(iid, 0.0) for iid in played_emb_ids],
+            dtype=np.float32,
+        ) + 1e-6
+        center = (vecs * w[:, None]).sum(axis=0) / w.sum()
+
+        # Exploration broadens taste: blend decay-weighted center with the
+        # uniform mean. w_discovery is the exploration knob (0=exploit,
+        # 1=explore) — same semantic in discovery and resurface modes.
+        uni = vecs.mean(axis=0)
+        e = float(self.w_discovery)
+        return (1.0 - e) * center + e * uni
+
     def recommend(
         self,
         profile: LocalProfile,
@@ -177,11 +204,16 @@ class HybridRanker:
             return [iid for iid, _ in ranked[:k]]
 
         # --- discovery scores (cosine sim) ---
+        # Taste center: decay-weighted mean of played-item embeddings.
+        # Makes half-life, signal weights, and counts all influence
+        # discovery (they were no-ops on unplayed candidates before).
         played_emb_ids = [iid for iid in played_ids if iid in id_to_idx]
         if len(played_emb_ids) > 0:
             if self._embeddings is not None:
-                played_vecs = self._embeddings[[id_to_idx[iid] for iid in played_emb_ids]]
-                profile_mean = played_vecs.mean(axis=0)
+                def _vecs(ids):
+                    return self._embeddings[[id_to_idx[iid] for iid in ids]]
+                profile_mean = self._taste_center(
+                    _vecs, repeat_raw, played_emb_ids, id_to_idx)
                 norms = np.linalg.norm(self._embeddings, axis=1, keepdims=True) + 1e-12
                 centered = self._embeddings / norms
                 p_norm = np.linalg.norm(profile_mean) + 1e-12
@@ -190,9 +222,11 @@ class HybridRanker:
                 # PQ ADC path: cosine via exact dot LUTs + codebook norms.
                 # profile_mean is reconstructed from the played items' codes
                 # (only ~len(played) rows decoded — cheap).
-                played_codes = self._codes[[id_to_idx[iid] for iid in played_emb_ids]]
-                played_vecs = _pq_decode(played_codes, self._centroids)
-                profile_mean = played_vecs.mean(axis=0)
+                def _vecs(ids):
+                    pc = self._codes[[id_to_idx[iid] for iid in ids]]
+                    return _pq_decode(pc, self._centroids)
+                profile_mean = self._taste_center(
+                    _vecs, repeat_raw, played_emb_ids, id_to_idx)
                 dots = _pq_adc_dot(profile_mean, self._codes, self._centroids)
                 p_norm = np.linalg.norm(profile_mean) + 1e-12
                 discovery_arr = dots / (self._pq_norms * p_norm + 1e-12)  # (n,)
@@ -212,9 +246,13 @@ class HybridRanker:
 
         hybrid = self.w_repeat * repeat_norm + self.w_discovery * discovery_norm
 
-        # Context boost from listen-rhythm profile
+        # Context: scale the REPEAT component only (scaling the whole
+        # hybrid was argsort-invariant — a no-op). Peak hours boost
+        # resurfacing; discovery stays untouched.
         if rhythm is not None and context_now is not None:
-            hybrid *= rhythm.context_weight(context_now)
+            hybrid = (rhythm.context_weight(context_now)
+                      * self.w_repeat * repeat_norm
+                      + self.w_discovery * discovery_norm)
 
         hybrid[~mask] = -1.0  # push played items to bottom
 

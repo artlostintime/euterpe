@@ -71,9 +71,10 @@ def test_roundtrip_dict() -> None:
     print("PASS")
 
 
-def test_context_uniform_no_ranking_change() -> None:
-    """Uniform rhythm: context multiplication doesn't change ranking order."""
-    _header("test_context_uniform_no_ranking_change")
+def test_context_pure_repeat_invariant() -> None:
+    """Pure-repeat ranker: uniform rhythm scales the only score component
+    uniformly, which is argsort-invariant — ranking unchanged."""
+    _header("test_context_pure_repeat_invariant")
     rng = np.random.default_rng(42)
     n_items, dim = 50, 8
     emb = rng.standard_normal((n_items, dim)).astype(np.float32)
@@ -81,18 +82,78 @@ def test_context_uniform_no_ranking_change() -> None:
     np.save(tmp, emb)
 
     try:
-        ranker = HybridRanker(embeddings_path=tmp)
+        ranker = HybridRanker(embeddings_path=tmp, w_repeat=1.0, w_discovery=0.0)
         profile = LocalProfile()
         now = time.time()
         for i in range(10):
             profile.observe(i, now - i * 86400)
 
         rhythm = ListenRhythm()  # default = uniform
-        recs_base = ranker.recommend(profile, k=15)
-        recs_ctx = ranker.recommend(profile, k=15, rhythm=rhythm, context_now=now)
+        recs_base = ranker.recommend(profile, k=15, exclude_played=False)
+        recs_ctx = ranker.recommend(profile, k=15, exclude_played=False,
+                                     rhythm=rhythm, context_now=now)
         assert recs_base == recs_ctx, (
-            f"ranking changed with uniform rhythm: {recs_base} vs {recs_ctx}"
+            f"pure-repeat ranking changed under uniform scale: {recs_base} vs {recs_ctx}"
         )
+        print("PASS")
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+def test_context_flips_hybrid_order() -> None:
+    """Context is live: peak hour boosts the repeat component enough to
+    reorder a repeat-heavy item above a discovery-heavy one (and vice
+    versa off-peak). Regression test for the uniform-scale no-op bug.
+
+    Geometry (taste center points +x after exploration blend):"""
+    _header("test_context_flips_hybrid_order")
+    """
+      C(0): 10 plays, emb [ 1, 0]     -> repeat 1.0, disc 1.0
+      A(1):  4 plays, emb [-1, 0]     -> repeat 0.4, disc 0.0 (min)
+      B(2):  0 plays, emb [-0.2, .98] -> repeat 0.0, disc 0.4
+      D(3):  0 plays, emb [-0.8, .6]  -> disc 0.1
+      E(4):  0 plays, emb [-0.5,-.87] -> disc 0.25
+    Off-peak (0.9): hybrid = 0.45*rep + 0.5*disc -> B(0.20) > A(0.18).
+    Peak    (1.1): hybrid = 0.55*rep + 0.5*disc -> A(0.22) > B(0.20).
+    """
+    emb = np.array([
+        [1.0, 0.0],
+        [-1.0, 0.0],
+        [-0.2, 0.9799],
+        [-0.8, 0.6],
+        [-0.5, -0.866025],
+    ], dtype=np.float32)
+    tmp = Path(__file__).resolve().parent / "_test_ctx_flip.npy"
+    np.save(tmp, emb)
+
+    # All listens Monday 22:00 — rhythm: hour 22 prob 1, Monday prob 1.
+    base_dt = datetime.datetime(2024, 1, 15, 22, 0)  # Monday
+    ts = base_dt.timestamp()
+    peak_ts = ts
+    off_ts = (base_dt + datetime.timedelta(hours=16)).timestamp()  # Tue 14:00
+
+    try:
+        ranker = HybridRanker(embeddings_path=tmp,
+                              w_repeat=0.5, w_discovery=0.5)
+        profile = LocalProfile()
+        for _ in range(10):
+            profile.observe(0, ts)
+        for _ in range(4):
+            profile.observe(1, ts)
+
+        rhythm = ListenRhythm()
+        rhythm.learn([ts] * 14)
+        assert abs(rhythm.context_weight(peak_ts) - 1.1) < 1e-9
+        assert abs(rhythm.context_weight(off_ts) - 0.9) < 1e-9
+
+        recs_peak = ranker.recommend(profile, k=5, exclude_played=False,
+                                      rhythm=rhythm, context_now=peak_ts)
+        recs_off = ranker.recommend(profile, k=5, exclude_played=False,
+                                     rhythm=rhythm, context_now=off_ts)
+        ia_p, ib_p = recs_peak.index(1), recs_peak.index(2)
+        ia_o, ib_o = recs_off.index(1), recs_off.index(2)
+        assert ia_p < ib_p, f"peak: repeat-heavy A should outrank B, got {recs_peak}"
+        assert ia_o > ib_o, f"off-peak: discovery-heavy B should outrank A, got {recs_off}"
         print("PASS")
     finally:
         tmp.unlink(missing_ok=True)
@@ -131,7 +192,8 @@ ALL_TESTS = [
     test_learn_correct_bucket,
     test_boost_cap,
     test_roundtrip_dict,
-    test_context_uniform_no_ranking_change,
+    test_context_pure_repeat_invariant,
+    test_context_flips_hybrid_order,
     test_context_none_bitidentical,
 ]
 
