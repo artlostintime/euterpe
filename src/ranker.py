@@ -147,6 +147,8 @@ class HybridRanker:
         k: int = 20,
         exclude_played: bool = True,
         half_life_days: float = 90.0,
+        rhythm: "ListenRhythm | None" = None,
+        context_now: float | None = None,
     ) -> List[int]:
         """Return *k* item ids ranked by hybrid score.
 
@@ -209,6 +211,11 @@ class HybridRanker:
         discovery_norm = _min_max(discovery_arr)
 
         hybrid = self.w_repeat * repeat_norm + self.w_discovery * discovery_norm
+
+        # Context boost from listen-rhythm profile
+        if rhythm is not None and context_now is not None:
+            hybrid *= rhythm.context_weight(context_now)
+
         hybrid[~mask] = -1.0  # push played items to bottom
 
         top_k_idx = np.argpartition(-hybrid, min(k, hybrid.size - 1))[:k]
