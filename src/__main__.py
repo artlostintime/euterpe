@@ -15,6 +15,7 @@ import sys
 import time
 from pathlib import Path
 
+from .contribution import ContributionBuilder
 from .profile import LocalProfile
 from .ranker import HybridRanker
 
@@ -132,15 +133,41 @@ def _run_from_profile(path: str, k: int) -> None:
     print(f"Top-{k} recs: {recs}")
 
 
+def _run_contribute(profile_path: str | None) -> None:
+    """Build and print a privacy-filtered contribution payload."""
+    if profile_path:
+        raw = json.loads(Path(profile_path).read_text())
+        profile = LocalProfile.from_dict(raw)
+        print(f"Loaded profile: {len(profile.item_counts)} items")
+    else:
+        top_items = _find_top_items()
+        if top_items is not None:
+            profile = _build_real_profile(top_items)
+            print(f"Profile: {len(profile.item_counts)} items (from {top_items.name})")
+        else:
+            profile = _build_synthetic_profile()
+            print(f"Profile: {len(profile.item_counts)} items (synthetic fallback)")
+
+    builder = ContributionBuilder(profile, consent=True)
+    payload = builder.build()
+    print(f"\nContribution payload: {payload['n_items']} items "
+          f"(schema={payload['schema']})")
+    print(json.dumps(payload, indent=2))
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Recommendation runtime demo")
     ap.add_argument("--demo", action="store_true", help="Run synthetic self-test")
     ap.add_argument("--profile", type=str, help="Path to profile JSON")
     ap.add_argument("--k", type=int, default=20, help="Number of recommendations")
+    ap.add_argument("--contribute", action="store_true",
+                    help="Build a privacy-filtered contribution payload")
     args = ap.parse_args()
 
     if args.demo:
         _run_demo()
+    elif args.contribute:
+        _run_contribute(args.profile)
     elif args.profile:
         _run_from_profile(args.profile, args.k)
     else:
