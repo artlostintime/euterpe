@@ -81,7 +81,12 @@ def _run_demo() -> None:
 
     # -- embeddings --
     emb_path, pq_path = HybridRanker.discover_embeddings()
-    ranker = HybridRanker(embeddings_path=emb_path, pq_path=pq_path)
+    ranker = HybridRanker(
+        embeddings_path=emb_path,
+        pq_path=pq_path,
+        w_discovery=profile.exploration,
+        w_repeat=1.0 - profile.exploration,
+    )
 
     if not ranker.has_embeddings():
         print(
