@@ -1,0 +1,12 @@
+{
+  "tier": "raw",
+  "source": "D:\\music-recommender\\models\\item2vec_final.npy",
+  "cold_start_s": 3.24,
+  "recommend_p50_ms": 1230.1,
+  "recommend_p95_ms": 1943.0,
+  "peak_rss_mb": 1829.5,
+  "baseline_rss_mb": 26.4,
+  "model_mb": 684.5,
+  "resolver_index_mb": 53.5,
+  "n_items": 2803656
+}
