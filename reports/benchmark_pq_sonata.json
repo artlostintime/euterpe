@@ -1,0 +1,12 @@
+{
+  "tier": "pq",
+  "source": "D:\\music-recommender\\models\\sonata_pq.npz",
+  "cold_start_s": 0.41,
+  "recommend_p50_ms": 722.9,
+  "recommend_p95_ms": 802.2,
+  "peak_rss_mb": 534.9,
+  "baseline_rss_mb": 26.4,
+  "model_mb": 42.8,
+  "resolver_index_mb": 53.5,
+  "n_items": 2803656
+}

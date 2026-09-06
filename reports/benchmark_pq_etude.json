@@ -1,0 +1,12 @@
+{
+  "tier": "pq",
+  "source": "D:\\music-recommender\\models\\etude_pq.npz",
+  "cold_start_s": 0.24,
+  "recommend_p50_ms": 536.2,
+  "recommend_p95_ms": 583.4,
+  "peak_rss_mb": 512.2,
+  "baseline_rss_mb": 26.3,
+  "model_mb": 20.9,
+  "resolver_index_mb": 53.5,
+  "n_items": 2803656
+}

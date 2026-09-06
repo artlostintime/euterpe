@@ -105,7 +105,7 @@ def main() -> None:
         "baseline_rss_mb": round(base_mb, 1),
         "model_mb": round(model_mb, 1),
         "resolver_index_mb": round(idx_mb, 1),
-        "n_items": int(ranker._embeddings.shape[0]),
+        "n_items": int(ranker._item_ids.shape[0]),
     }
     out = Path(__file__).resolve().parent.parent / "reports"
     out.mkdir(exist_ok=True)

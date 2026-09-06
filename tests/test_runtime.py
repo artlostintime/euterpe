@@ -145,7 +145,16 @@ def test_pq_decode_roundtrip() -> None:
     try:
         ranker = HybridRanker(pq_path=tmp)
         assert ranker.has_embeddings()
-        assert ranker._embeddings.shape == (n_items, n_sub * sub_dim)
+        assert ranker._codes.shape == (n_items, n_sub)
+        # ADC dot must equal exact decode-then-dot
+        q = rng.standard_normal(n_sub * sub_dim).astype(np.float32)
+        from src.ranker import _pq_adc_dot, _pq_norms
+        adc = _pq_adc_dot(q, codes, centroids)
+        exact = reconstructed @ q
+        assert np.allclose(adc, exact, atol=1e-5), "ADC dot mismatch"
+        # ADC norms must equal exact decoded norms
+        assert np.allclose(_pq_norms(codes, centroids),
+                          np.linalg.norm(reconstructed, axis=1), atol=1e-5)
         print("PASS")
     finally:
         tmp.unlink(missing_ok=True)

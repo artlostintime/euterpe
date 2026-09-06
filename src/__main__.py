@@ -97,7 +97,11 @@ def _run_demo() -> None:
     src = emb_path or pq_path
     # Load once to show shape (ranker already holds it)
     ranker._load()
-    shape = ranker._embeddings.shape
+    if ranker._embeddings is not None:
+        shape = ranker._embeddings.shape
+    else:
+        n_sub, _, sub_dim = ranker._centroids.shape
+        shape = (ranker._codes.shape[0], n_sub * sub_dim)
     print(f"Embeddings: {src}  shape={shape[0]}×{shape[1]}")
 
     recs = ranker.recommend(profile, k=10)

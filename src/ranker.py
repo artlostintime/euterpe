@@ -10,11 +10,8 @@ import numpy as np
 from .profile import LocalProfile
 
 # ------------------------------------------------------------------
-# PQ decode helpers
+# PQ helpers
 # ------------------------------------------------------------------
-
-# ponytail: global lock for PQ decode; fine at single-thread on-device
-# Upgrade: per-subspace parallel decode if throughput matters
 
 
 def _pq_decode(codes: np.ndarray, centroids: np.ndarray) -> np.ndarray:
@@ -31,6 +28,33 @@ def _pq_decode(codes: np.ndarray, centroids: np.ndarray) -> np.ndarray:
     out = np.empty((codes.shape[0], n_sub * sub_dim), dtype=np.float32)
     for s in range(n_sub):
         out[:, s * sub_dim : (s + 1) * sub_dim] = centroids[s, codes[:, s]]
+    return out
+
+
+def _pq_norms(codes: np.ndarray, centroids: np.ndarray) -> np.ndarray:
+    """Exact L2 norms of reconstructed vectors via codebook lookup (ADC).
+
+    Cheaper than decoding: ||recon_i||^2 = sum_s ||centroids[s, codes[i,s]]||^2.
+    """
+    cent_sq = (centroids.astype(np.float32) ** 2).sum(axis=2)  # (n_sub, k)
+    out = np.zeros(codes.shape[0], dtype=np.float32)
+    for s in range(cent_sq.shape[0]):
+        out += cent_sq[s, codes[:, s]]
+    return np.sqrt(out)
+
+
+def _pq_adc_dot(query: np.ndarray, codes: np.ndarray,
+                centroids: np.ndarray) -> np.ndarray:
+    """Exact dot(reconstructed_item, query) via per-subspace LUTs (ADC).
+
+    Never materializes the (n, d) reconstruction — O(n * n_sub) gathers.
+    """
+    n_sub, _, sub_dim = centroids.shape
+    q = query.astype(np.float32).reshape(n_sub, sub_dim)
+    lut = np.einsum("skd,sd->sk", centroids, q)  # (n_sub, k)
+    out = np.zeros(codes.shape[0], dtype=np.float32)
+    for s in range(n_sub):
+        out += lut[s, codes[:, s]]
     return out
 
 
@@ -54,7 +78,8 @@ class HybridRanker:
     """Fuse repeat (decay) + discovery (embedding cosine) signals.
 
     Supports raw .npy embedding matrices and .npz PQ-compressed codes.
-    Embeddings are loaded via mmap when possible.
+    PQ codes are scored via ADC (lookup tables) — the full (n, d)
+    reconstruction is never materialized.
     """
 
     # Embedding search paths tried by --demo
@@ -74,6 +99,9 @@ class HybridRanker:
         self.w_discovery = w_discovery
 
         self._embeddings: Optional[np.ndarray] = None  # (n, d) float32
+        self._codes: Optional[np.ndarray] = None       # (n, n_sub) uint8
+        self._centroids: Optional[np.ndarray] = None   # (n_sub, k, sub_dim)
+        self._pq_norms: Optional[np.ndarray] = None    # (n,) float32
         self._item_ids: Optional[np.ndarray] = None     # (n,) int
         self._embeddings_path: Optional[str | Path] = embeddings_path
         self._pq_path: Optional[str | Path] = pq_path
@@ -87,14 +115,14 @@ class HybridRanker:
         if self._loaded:
             return
         if self._pq_path and Path(self._pq_path).exists():
-            data = np.load(self._pq_path)
-            codes = data["codes"]         # (n, n_sub) uint8
-            centroids = data["centroids"] # (n_sub, k, sub_dim)
-            self._embeddings = _pq_decode(codes, centroids)
-            self._item_ids = (
-                data["item_ids"] if "item_ids" in data
-                else np.arange(self._embeddings.shape[0])
-            )
+            with np.load(self._pq_path) as data:
+                self._codes = data["codes"]         # (n, n_sub) uint8
+                self._centroids = data["centroids"] # (n_sub, k, sub_dim)
+                self._item_ids = (
+                    data["item_ids"] if "item_ids" in data
+                    else np.arange(self._codes.shape[0])
+                )
+            self._pq_norms = _pq_norms(self._codes, self._centroids)
         elif self._embeddings_path and Path(self._embeddings_path).exists():
             # Ponytail: load fully, not mmap — we need all rows for cosine
             # anyway, and mmap holds Windows file locks.
@@ -111,7 +139,7 @@ class HybridRanker:
 
     def has_embeddings(self) -> bool:
         self._load()
-        return self._embeddings is not None
+        return self._embeddings is not None or self._codes is not None
 
     def recommend(
         self,
@@ -131,10 +159,13 @@ class HybridRanker:
         repeat_raw = profile.decay_scores(half_life_days=half_life_days)
         played_ids = set(profile.item_counts.keys())
 
-        if self._embeddings is not None and len(repeat_raw) > 0:
+        has_model = self._embeddings is not None or self._codes is not None
+        if has_model and len(repeat_raw) > 0:
+            n = (self._embeddings.shape[0] if self._embeddings is not None
+                 else self._codes.shape[0])
             id_to_idx = {int(iid): idx for idx, iid in enumerate(self._item_ids)}
             # Build repeat score vector aligned with embeddings
-            repeat_arr = np.zeros(self._embeddings.shape[0], dtype=np.float32)
+            repeat_arr = np.zeros(n, dtype=np.float32)
             for iid, sc in repeat_raw.items():
                 if iid in id_to_idx:
                     repeat_arr[id_to_idx[iid]] = sc
@@ -146,18 +177,28 @@ class HybridRanker:
         # --- discovery scores (cosine sim) ---
         played_emb_ids = [iid for iid in played_ids if iid in id_to_idx]
         if len(played_emb_ids) > 0:
-            played_vecs = self._embeddings[[id_to_idx[iid] for iid in played_emb_ids]]
-            profile_mean = played_vecs.mean(axis=0)
-            # cosine sim = dot / (||a|| * ||b||), normalised by mean of item norms
-            norms = np.linalg.norm(self._embeddings, axis=1, keepdims=True) + 1e-12
-            centered = self._embeddings / norms
-            p_norm = np.linalg.norm(profile_mean) + 1e-12
-            discovery_arr = (centered @ profile_mean) / p_norm  # (n,)
+            if self._embeddings is not None:
+                played_vecs = self._embeddings[[id_to_idx[iid] for iid in played_emb_ids]]
+                profile_mean = played_vecs.mean(axis=0)
+                norms = np.linalg.norm(self._embeddings, axis=1, keepdims=True) + 1e-12
+                centered = self._embeddings / norms
+                p_norm = np.linalg.norm(profile_mean) + 1e-12
+                discovery_arr = (centered @ profile_mean) / p_norm  # (n,)
+            else:
+                # PQ ADC path: cosine via exact dot LUTs + codebook norms.
+                # profile_mean is reconstructed from the played items' codes
+                # (only ~len(played) rows decoded — cheap).
+                played_codes = self._codes[[id_to_idx[iid] for iid in played_emb_ids]]
+                played_vecs = _pq_decode(played_codes, self._centroids)
+                profile_mean = played_vecs.mean(axis=0)
+                dots = _pq_adc_dot(profile_mean, self._codes, self._centroids)
+                p_norm = np.linalg.norm(profile_mean) + 1e-12
+                discovery_arr = dots / (self._pq_norms * p_norm + 1e-12)  # (n,)
         else:
-            discovery_arr = np.zeros(self._embeddings.shape[0], dtype=np.float32)
+            discovery_arr = np.zeros(n, dtype=np.float32)
 
         # --- exclude played ---
-        mask = np.ones(self._embeddings.shape[0], dtype=bool)
+        mask = np.ones(n, dtype=bool)
         if exclude_played:
             for iid in played_ids:
                 if iid in id_to_idx:
