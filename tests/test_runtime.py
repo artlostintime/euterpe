@@ -186,6 +186,35 @@ def test_recommend_ranking_order() -> None:
         tmp.unlink(missing_ok=True)
 
 
+def test_build_real_profile() -> None:
+    """_build_real_profile picks IDs that exist in a fake top_items.json."""
+    _header("test_build_real_profile")
+    import json
+    from src.__main__ import _build_real_profile
+
+    # Build a fake top_items.json with 200 entries
+    fake_items = [{"v1_item_id": i, "recording_mbid": f"{i:032x}", "count": 100000 + i} for i in range(200)]
+    tmp_dir = Path(__file__).resolve().parent / "_test_real_profile_tmp"
+    tmp_dir.mkdir(exist_ok=True)
+    fake_path = tmp_dir / "top_items.json"
+    try:
+        fake_path.write_text(json.dumps(fake_items))
+        profile = _build_real_profile(fake_path, n_items=30, span_days=90)
+        # Profile should have items picked from the first 200
+        assert len(profile.item_counts) > 0, "profile is empty"
+        assert len(profile.item_counts) <= 30, f"too many items: {len(profile.item_counts)}"
+        # Every profile item_id must be in [0, 199] — within the fake top_items
+        for item_id in profile.item_counts:
+            assert 0 <= item_id < 200, f"item_id {item_id} out of range"
+        # Deterministic: same call → same IDs
+        profile2 = _build_real_profile(fake_path, n_items=30, span_days=90)
+        assert set(profile.item_counts.keys()) == set(profile2.item_counts.keys()), "non-deterministic"
+        print("PASS")
+    finally:
+        import shutil
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
 ALL_TESTS = [
     test_profile_observe,
     test_decay_math,
@@ -195,6 +224,7 @@ ALL_TESTS = [
     test_pq_decode_roundtrip,
     test_min_max,
     test_recommend_ranking_order,
+    test_build_real_profile,
 ]
 
 if __name__ == "__main__":
