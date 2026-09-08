@@ -11,6 +11,23 @@ discovery engine (item2vec embeddings, product-quantized, ADC-scored).
 Trained and evaluated on MLHD+ — 1.68 billion listening events from
 36,970 users over a 2.8M-item catalog.
 
+## Research status
+
+Euterpe v1.0.0 accompanies two manuscripts currently in submission to
+the Journal of Open Humanities Data (JOHD):
+
+- **Paper 1** — *Sanitizing Music Listening Histories at Scale: A
+  Reproducible Quality Audit of MLHD+* (audit archive: Zenodo DOI
+  10.5281/zenodo.22338293)
+- **Paper 2** — *Why Did the Algorithm Think I'd Like This?
+  Understanding Behavioral Signals in Personalized Music
+  Recommendation* (research archive: Zenodo DOI
+  10.5281/zenodo.22661887)
+
+The released benchmark and evidence correspond to the frozen versions
+identified in those Zenodo archives. This repository's own archive is
+Zenodo DOI 10.5281/zenodo.22665816.
+
 ## Install
 
 ```bash
@@ -23,7 +40,14 @@ the demo works without them via repeat ranking.
 
 ## Quickstart
 
+```bash
+# 1. fetch the model artifacts (~120 MB default tier) into models/
+#    from https://huggingface.co/artlostintime/euterpe-model
+hf download artlostintime/euterpe-model sonata_pq.npz v1_vocab.parquet mbid_index.bin top_items.json --repo-type model --local-dir models
+```
+
 ```python
+# 2. serve recommendations
 import sys; sys.path.insert(0, ".")
 from src.profile import LocalProfile
 from src.ranker import HybridRanker
@@ -50,6 +74,9 @@ Two engines, fused by an explicit weight:
    decay-weighted taste center and catalog embeddings, served from
    product-quantized codes via asymmetric distance computation (ADC):
    2.8M items in 21-43 MB, scored without materializing the matrix.
+   The released runtime uses the Item2Vec-based discovery engine; the
+   paper's fusion experiment evaluates a GRU as a separate
+   sequence-based discovery signal.
 3. **Context weighting** — hour/day listening-rhythm histograms,
    clamped to [0.9, 1.1] so context nudges but never overrides behavior.
 
@@ -89,11 +116,11 @@ Full comparison: [`reports/tier_comparison.md`](reports/tier_comparison.md).
 Honest limits, measured:
 
 - **Discovery is weak in absolute terms** (best 1.73% recall@100,
-  item2vec-w10, on a 2.8M-item catalog with a 14-day test window) — a
-  lower bound on a hard task, not an estimate of product-level
-  performance. The repeat engine is the workhorse; the discovery engine
-  provides the primary path to personalized recommendations outside the
-  user's observed history.
+  item2vec-w10, on a 2.8M-item catalog with a 14-day test window) —
+  should not be interpreted as an estimate of product-level
+  recommendation performance. The repeat engine is the workhorse; the
+  discovery engine provides the primary path to personalized
+  recommendations outside the user's observed history.
 - **PQ costs recall**: sonata retains 35.8%, etude 16.8% of exact
   top-100 neighbors. Quantize the discovery engine, never the repeat
   engine.
@@ -184,5 +211,6 @@ models/     model files (gitignored — download from HuggingFace)
 
 ## License
 
-Apache 2.0 — see [LICENSE](LICENSE). Model weights: Apache 2.0, same
-terms. Upstream MLHD+ data: CC0, MetaBrainz Foundation.
+Apache 2.0 — see [LICENSE](LICENSE). The released model artifacts are
+distributed under Apache 2.0 by the author; they were trained from
+MLHD+ data, which is released under CC0 by the MetaBrainz Foundation.

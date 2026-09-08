@@ -13,11 +13,12 @@ identifiers:
     description: "Versioned archive of this repository"
 repository-code: "https://github.com/artlostintime/euterpe"
 abstract: >-
-  Local-first music recommendation runtime: decayed-frequency repeat
-  engine, item2vec discovery engine with product-quantized ADC serving,
-  MBID resolver, ListenBrainz importer, context weighting, and opt-in
-  contribution. Trained and evaluated on MLHD+ (1.68 billion sanitized
-  listening events, 36,970 users, 2.8M recordings).
+  Euterpe is a local-first music recommendation runtime:
+  decayed-frequency repeat engine, item2vec discovery engine with
+  product-quantized ADC serving, MBID resolver, ListenBrainz importer,
+  context weighting, and opt-in contribution. Trained and evaluated on
+  MLHD+ (1.68 billion sanitized listening events, 36,970 users, 2.8M
+  recordings).
 keywords:
   - music
   - recommendation
