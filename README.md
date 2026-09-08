@@ -80,6 +80,11 @@ Two engines, fused by an explicit weight:
 3. **Context weighting** — hour/day listening-rhythm histograms,
    clamped to [0.9, 1.1] so context nudges but never overrides behavior.
 
+Fusion (`w_repeat`/`w_discovery`) and taste breadth (`exploration`)
+are separate knobs: exploration blends the taste center toward the
+uniform mean of played items for broader discovery; the fusion weight
+controls how much discovery contributes to the final ranking.
+
 Signals: `play` (1.0), `completion` (1.2), `replay` (1.0), `like` (2.0),
 `save` (1.5), `playlist_add` (1.5), `short_play` (0.3), `skip` (0.0).
 
@@ -93,11 +98,12 @@ Hosted on HuggingFace (Apache 2.0, derived from CC0 MLHD+ data):
 | `etude_pq.npz` | 20.9 MB | PQ tier, 32x compression — low storage |
 | `item2vec_final.npy` | 684.5 MB | raw f32 embeddings (2,803,656 x 64) |
 | `mbid_index.bin` | 53.5 MB | MBID -> item_id binary-search index |
-| `v1_vocab.parquet` | 58.4 MB | item vocabulary (MBID, count, id) |
+| `v1_vocab.parquet` | 58.4 MB | all-events catalog vocabulary (MBID, count, id) — defines the embedding ID space (2,803,656 items); the evaluation's train-only candidate universe (2,787,934) is a paper-side subset, see the model card |
 | `top_items.json` | 0.2 MB | cold-start popularity + name bridge |
 
 Download into `models/` (gitignored); the runtime discovers them
 automatically.
+Set `EUTERPE_MODELS` (os.pathsep-separated) to search custom locations.
 
 ## Benchmarks
 

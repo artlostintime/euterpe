@@ -47,8 +47,8 @@ def _build_real_profile(top_items_path: Path, n_items: int = 30, span_days: int 
 
 def _find_top_items() -> Path | None:
     """Locate top_items.json in any SEARCH_DIR."""
-    for d in HybridRanker.SEARCH_DIRS:
-        p = Path(d) / "top_items.json"
+    for d in HybridRanker.search_dirs():
+        p = d / "top_items.json"
         if p.exists():
             return p
     return None
@@ -84,8 +84,7 @@ def _run_demo() -> None:
     ranker = HybridRanker(
         embeddings_path=emb_path,
         pq_path=pq_path,
-        w_discovery=profile.exploration,
-        w_repeat=1.0 - profile.exploration,
+        exploration=profile.exploration,
     )
 
     if not ranker.has_embeddings():
@@ -94,7 +93,7 @@ def _run_demo() -> None:
             "Skipping recommend() demo (tests cover this with synthetic data).\n"
             "Searched:"
         )
-        for d in HybridRanker.SEARCH_DIRS:
+        for d in HybridRanker.search_dirs():
             print(f"  {d}")
         print("\nTo run the full demo, place a .npy (2-D float) or .npz "
               "(keys: codes, centroids) under one of the above paths.")

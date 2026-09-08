@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -82,21 +83,17 @@ class HybridRanker:
     reconstruction is never materialized.
     """
 
-    # Embedding search paths tried by --demo
-    SEARCH_DIRS: list[str] = [
-        r"D:\music-recommender\models",
-        r"C:\Users\assas\AppData\Local\Temp\opencode\lb",
-    ]
-
     def __init__(
         self,
         embeddings_path: str | Path | None = None,
         pq_path: str | Path | None = None,
         w_repeat: float = 0.7,
         w_discovery: float = 0.3,
+        exploration: float = 0.3,
     ) -> None:
         self.w_repeat = w_repeat
         self.w_discovery = w_discovery
+        self.exploration = exploration
 
         self._embeddings: Optional[np.ndarray] = None  # (n, d) float32
         self._codes: Optional[np.ndarray] = None       # (n, n_sub) uint8
@@ -106,6 +103,15 @@ class HybridRanker:
         self._embeddings_path: Optional[str | Path] = embeddings_path
         self._pq_path: Optional[str | Path] = pq_path
         self._loaded = False
+
+    @classmethod
+    def search_dirs(cls) -> list[Path]:
+        """Model search paths: $EUTERPE_MODELS entries, then the
+        repository's own models/ directory (relative to this file)."""
+        dirs = [Path(p) for p in
+                os.environ.get("EUTERPE_MODELS", "").split(os.pathsep) if p]
+        dirs.append(Path(__file__).resolve().parent.parent / "models")
+        return dirs
 
     # ------------------------------------------------------------------
     # Lazy load
@@ -162,10 +168,10 @@ class HybridRanker:
         center = (vecs * w[:, None]).sum(axis=0) / w.sum()
 
         # Exploration broadens taste: blend decay-weighted center with the
-        # uniform mean. w_discovery is the exploration knob (0=exploit,
-        # 1=explore) — same semantic in discovery and resurface modes.
+        # uniform mean. exploration is the taste-breadth knob (0=exploit,
+        # 1=explore) — separate from the fusion weight.
         uni = vecs.mean(axis=0)
-        e = float(self.w_discovery)
+        e = float(self.exploration)
         return (1.0 - e) * center + e * uni
 
     def recommend(
@@ -272,7 +278,7 @@ class HybridRanker:
 
         Returns (embeddings_path, pq_path) — at most one will be non-None.
         """
-        for d in cls.SEARCH_DIRS:
+        for d in cls.search_dirs():
             base = Path(d)
             if not base.exists():
                 continue

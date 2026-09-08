@@ -120,7 +120,7 @@ def main() -> None:
     expl = {}
     for e in (0.1, 0.3, 0.9):
         r = HybridRanker(pq_path=MODELS / "sonata_pq.npz",
-                         w_repeat=1.0 - e, w_discovery=e)
+                         exploration=e)
         recs, ms = timed_recs(r, profiles["medium100"], k=20)
         expl[str(e)] = {"ms": round(ms, 1), "top": recs[:10]}
         print(f"exploration={e}: {ms:.1f} ms  top5={recs[:5]}")
