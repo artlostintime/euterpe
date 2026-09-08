@@ -42,7 +42,7 @@ and optional hour-of-day / day-of-week context weighting.
 | `sonata_pq.npz` | 42.8 MB | PQ codes, 16 subspaces — 16× compression, ANN recall@100 0.358 |
 | `etude_pq.npz` | 20.9 MB | PQ codes, 8 subspaces — 32× compression, ANN recall@100 0.168 |
 | `mbid_index.bin` | 53.5 MB | MBID → item_id resolver (binary-search index, 2.8M rows) |
-| `v1_vocab.parquet` | 58 MB | recording_mbid → item_id vocabulary + counts |
+| `v1_vocab.parquet` | 58 MB | recording_mbid → item_id vocabulary + counts. **All-events vocabulary** (2,803,656 items, count ≥ 10 over all events) — defines the embedding ID space. NOT the train-only candidate universe (2,787,934 items) used for evaluation; see the paper's Candidate Universe section. |
 | `top_items.json` | 0.2 MB | Cold-start popularity ranking + name bridge (top 2,000) |
 | `metrics.json` | — | Unified evaluation metrics (see below) |
 
