@@ -60,18 +60,25 @@ Sonata is the recommended default tier; etude is the low-storage tier.
 
 ## Evaluation
 
-<!-- V4-NUMBERS: filled from lb-eval v4 metrics.json on release -->
-
 Measured on a 5,000-user held-out cohort under a per-user temporal
 protocol (validation-based hyperparameter selection, test with
-train+validation history). Headline findings:
+train+validation history, train-only candidate universe of 2,787,934
+items). Headline findings (recall@100, %):
 
 - Repeats: decayed-frequency scoring dominates among evaluated
-  scorers (see metrics.json for full 21-scorer comparison).
-- Discovery: embedding similarity is the only evaluated scorer family
-  with non-zero discovery recall; frequency-based scorers saturate at
-  zero by construction.
-- Full metrics: 21 scorers × recall/precision/NDCG@20/@100, MRR@10,
+  scorers — decay_30d 28.9% vs user-frequency 12.9%; the
+  validation-selected fusion matches the best single scorer (29.0%).
+- Discovery: embedding similarity leads — item2vec with a 10-item
+  profile window reaches 1.73% vs 0.47% for the popularity baseline;
+  frequency-based scorers saturate at zero (empirical saturation:
+  the average user's top-500 recommendations are ≥99.99% history
+  items).
+- BPR-MF (evaluated configuration) is statistically indistinguishable
+  from popularity overall (+0.09pp, 95% CI [-0.02, +0.20]) and lower
+  on the discovery split.
+- Robustness: conclusions stable across cohort seeds 42/43/44 (max sd
+  0.36pp) and under a global-chronological split sensitivity check.
+- Full metrics: 22 scorers × recall/precision/NDCG@20/@100, MRR@10,
   hitrate@20, novelty, diversity, per-user percentiles, paired
   bootstrap CIs, fusion weight sweep, catalog coverage.
 
@@ -97,8 +104,9 @@ Kaggle kernels in the runtime repo (deterministic, checksum-verified).
 
 ## Limitations
 
-- Discovery recall is modest (~1% recall@100 on a 2.8M-item catalog) —
-  an honest lower bound on a hard task, not a ceiling.
+- Discovery recall is modest (best 1.73% recall@100 on a 2.8M-item
+  catalog) — should not be interpreted as an estimate of
+  product-level recommendation performance.
 - Embeddings cover the MLHD+ catalog as of the training snapshot; new
   releases need the popularity fallback until the next retrain.
 - The cohort is MLHD+ power users; repeat rates on general populations
@@ -118,7 +126,8 @@ Kaggle kernels in the runtime repo (deterministic, checksum-verified).
 
 See also the companion papers: an MLHD+ dataset audit (JOHD submission,
 Zenodo DOI 10.5281/zenodo.22338293) and a behavioral-signals
-recommendation study (in submission).
+recommendation study (JOHD submission, Zenodo DOI
+10.5281/zenodo.22661887).
 
 ## License
 

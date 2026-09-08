@@ -1,0 +1,33 @@
+cff-version: 1.2.0
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+title: Euterpe
+type: software
+authors:
+  - name: Shuvi
+    orcid: "https://orcid.org/0000-0002-0628-4361"
+identifiers:
+  # Repository DOI minted by Zenodo's GitHub integration on first release.
+  # Update after tagging v1.0.0.
+  - type: doi
+    value: "10.5281/zenodo.REPO_DOI_PLACEHOLDER"
+    description: "Versioned archive of this repository"
+repository-code: "https://github.com/artlostintime/euterpe"
+abstract: >-
+  Local-first music recommendation runtime: decayed-frequency repeat
+  engine, item2vec discovery engine with product-quantized ADC serving,
+  MBID resolver, ListenBrainz importer, context weighting, and opt-in
+  contribution. Trained and evaluated on MLHD+ (1.68 billion sanitized
+  listening events, 36,970 users, 2.8M recordings).
+keywords:
+  - music
+  - recommendation
+  - item2vec
+  - product-quantization
+  - local-first
+  - on-device
+  - MLHD
+license: Apache-2.0
+version: 1.0.0
+date-released: "2026-09-08"
