@@ -123,11 +123,18 @@ python tests/test_signals.py
 
 ## Reproducing the pipeline
 
-The full train/eval pipeline is a chain of deterministic Kaggle kernels.
-The runtime kernels (sanitize, EDA, trainprep, item2vec, ranker) ship in
-the Paper 1 audit archive (Zenodo DOI 10.5281/zenodo.22338293); the
-unified evaluator (lb-eval v5.0.0, 22-scorer protocol) ships in the
-Paper 2 archive (Zenodo DOI 10.5281/zenodo.22661887).
+The full train/eval pipeline is a chain of deterministic Kaggle kernels
+(`kernels/` — each folder is pushable as-is):
+
+```
+lb-sanitize -> lb-eda -> lb-trainprep -> lb-item2vec / lb-ranker / lb-bpr
+             -> lb-eval (22-scorer unified protocol) -> lb-quantize
+```
+
+This repo carries the **living** kernels; the exact versions that
+produced the published results are frozen in the Zenodo archives
+(Paper 1: DOI 10.5281/zenodo.22338293; Paper 2: DOI
+10.5281/zenodo.22661887).
 
 Paper 2 benchmark provenance:
 
@@ -137,7 +144,8 @@ Paper 2 benchmark provenance:
 - Additional cohort seeds: 43, 44
 
 Every reported number in the papers comes from these kernels under
-frozen seeds.
+frozen seeds. See `kernels/README.md` for the chain, runtimes, and
+outputs.
 
 ## How to cite
 
@@ -166,15 +174,13 @@ If you use euterpe, please cite the companion papers:
 
 ```
 src/        serving engine (profile, ranker, resolver, importer, context, contribution)
+kernels/    reproducible Kaggle pipeline (sanitize -> ... -> quantize)
 tools/      benchmark, sweep, resolver-index builder
 tests/      26 tests (pytest-free)
 docs/       app-integration guide, architecture, reproducibility
 reports/    benchmarks, tier comparison, sweep results
 models/     model files (gitignored — download from HuggingFace)
 ```
-
-The research kernels (train/eval pipeline) live in the Zenodo archives
-linked above, not in this repo.
 
 ## License
 
