@@ -8,10 +8,8 @@ authors:
   - name: Shuvi
     orcid: "https://orcid.org/0000-0002-0628-4361"
 identifiers:
-  # Repository DOI minted by Zenodo's GitHub integration on first release.
-  # Update after tagging v1.0.0.
   - type: doi
-    value: "10.5281/zenodo.REPO_DOI_PLACEHOLDER"
+    value: "10.5281/zenodo.22665816"
     description: "Versioned archive of this repository"
 repository-code: "https://github.com/artlostintime/euterpe"
 abstract: >-
