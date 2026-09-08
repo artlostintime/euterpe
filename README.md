@@ -1,9 +1,9 @@
 # euterpe
 
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](requirements.txt)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
 [![Tests](https://img.shields.io/badge/tests-26%2F26-brightgreen)](tests/)
-[![Models](https://img.shields.io/badge/models-HuggingFace-yellow)](https://huggingface.co/artlostintime)
+[![Models](https://img.shields.io/badge/models-HuggingFace-yellow)](https://huggingface.co/artlostintime/euterpe-model)
 
 Local-first music recommendation: a hybrid engine that fuses a per-user
 repeat engine (decayed, signal-weighted play counts) with a catalog
@@ -45,7 +45,7 @@ Two engines, fused by an explicit weight:
 
 1. **Repeat engine** — exponentially-decayed, signal-weighted counts over
    the user's own history. Learns online from every event; no training
-   loop, fully local. Carries ~75% of measured recommendation quality.
+   loop, fully local.
 2. **Discovery engine** — cosine similarity between the user's
    decay-weighted taste center and catalog embeddings, served from
    product-quantized codes via asymmetric distance computation (ADC):
@@ -88,10 +88,12 @@ Full comparison: [`reports/tier_comparison.md`](reports/tier_comparison.md).
 
 Honest limits, measured:
 
-- **Discovery is weak in absolute terms** (~1.1% recall@100 on a 2.8M
-  catalog with a 14-day test window) — a lower bound on a hard task, not
-  a ceiling. The repeat engine is the workhorse; discovery is the only
-  path to anything new.
+- **Discovery is weak in absolute terms** (best 1.73% recall@100,
+  item2vec-w10, on a 2.8M-item catalog with a 14-day test window) — a
+  lower bound on a hard task, not an estimate of product-level
+  performance. The repeat engine is the workhorse; the discovery engine
+  provides the primary path to personalized recommendations outside the
+  user's observed history.
 - **PQ costs recall**: sonata retains 35.8%, etude 16.8% of exact
   top-100 neighbors. Quantize the discovery engine, never the repeat
   engine.
@@ -121,17 +123,21 @@ python tests/test_signals.py
 
 ## Reproducing the pipeline
 
-The full train/eval pipeline is a chain of deterministic Kaggle kernels
-(`kernels/` — each folder is pushable as-is):
+The full train/eval pipeline is a chain of deterministic Kaggle kernels.
+The runtime kernels (sanitize, EDA, trainprep, item2vec, ranker) ship in
+the Paper 1 audit archive (Zenodo DOI 10.5281/zenodo.22338293); the
+unified evaluator (lb-eval v5.0.0, 22-scorer protocol) ships in the
+Paper 2 archive (Zenodo DOI 10.5281/zenodo.22661887).
 
-```
-lb-sanitize -> lb-eda -> lb-trainprep -> lb-item2vec / lb-ranker / lb-bpr
-            -> lb-eval (21-scorer unified protocol) -> lb-quantize
-```
+Paper 2 benchmark provenance:
+
+- Evaluator: lb-eval v5.0.0 (22-scorer unified protocol)
+- Evidence release: v6
+- Primary cohort seed: 42
+- Additional cohort seeds: 43, 44
 
 Every reported number in the papers comes from these kernels under
-frozen seeds. See `kernels/README.md` for the chain, runtimes, and
-outputs.
+frozen seeds.
 
 ## How to cite
 
@@ -160,13 +166,15 @@ If you use euterpe, please cite the companion papers:
 
 ```
 src/        serving engine (profile, ranker, resolver, importer, context, contribution)
-kernels/    reproducible Kaggle pipeline (sanitize -> ... -> quantize)
 tools/      benchmark, sweep, resolver-index builder
 tests/      26 tests (pytest-free)
 docs/       app-integration guide, architecture, reproducibility
 reports/    benchmarks, tier comparison, sweep results
 models/     model files (gitignored — download from HuggingFace)
 ```
+
+The research kernels (train/eval pipeline) live in the Zenodo archives
+linked above, not in this repo.
 
 ## License
 
