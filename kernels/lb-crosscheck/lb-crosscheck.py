@@ -1,4 +1,7 @@
 """
+SPDX-License-Identifier: Apache-2.0
+Copyright (c) 2026 Shuvi
+
 Cross-check kernel: independent re-computation of EDA statistics for verification.
 
 Recomputes every EDA summary stat via a DIFFERENT implementation path
@@ -295,8 +298,9 @@ def run_crosscheck(input_path, output_dir):
 
 - **Median/P90:** EDA uses `counts[int(len(counts) * p)]` (index-based);
   this kernel uses `np.percentile(..., interpolation='linear')` which
-  interpolates between adjacent values.  SOFT-PASS acceptable for small
-  numerical differences arising from this definitional gap.
+  interpolates between adjacent values. Numerical equality is therefore not
+  expected; both verdicts are PASS because the deltas fall within the
+  predefined 0.1% tolerance for this definitional difference.
 - **Gini:** Both formulas are mathematically equivalent (mean-absolute-difference
   form), but numerical precision differs: EDA's cumulative Python loop vs
   this kernel's Lorenz curve + trapezoidal integration.  PASS/FAIL at 0.1%
@@ -341,6 +345,8 @@ def main():
     log(f"/kaggle/input tree:\n{tree}")
     if not candidates:
         sys.exit("FATAL: listens.parquet not found under /kaggle/input")
+    if len(candidates) > 1:
+        sys.exit(f"FATAL: multiple listens.parquet found, expected exactly one: {candidates}")
     run_crosscheck(candidates[0], Path("/kaggle/working"))
 
 

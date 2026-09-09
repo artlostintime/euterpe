@@ -1,4 +1,7 @@
 """
+SPDX-License-Identifier: Apache-2.0
+Copyright (c) 2026 Shuvi
+
 Cross-shard census kernel: lightweight scan of MLHD+ shards (review R3-P2).
 
 For each audited shard (streaming download -> MD5 verify -> scan -> delete):

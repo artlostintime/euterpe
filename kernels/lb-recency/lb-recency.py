@@ -1,4 +1,7 @@
 """
+SPDX-License-Identifier: Apache-2.0
+Copyright (c) 2026 Shuvi
+
 Recency evaluation kernel: decayed-frequency and rank-fusion scorers.
 
 Evaluates whether exponentially-decayed frequency beats plain frequency for

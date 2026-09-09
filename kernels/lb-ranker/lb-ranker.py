@@ -1,4 +1,7 @@
 """
+SPDX-License-Identifier: Apache-2.0
+Copyright (c) 2026 Shuvi
+
 GRU ranker kernel: sequential scoring over frozen item2vec embeddings.
 
 Trains a GRU that reads a user's recent listening history and scores
@@ -24,8 +27,8 @@ Design notes:
   - GRU hidden_size=128, Linear(128→64) projection, dot-product score.
   - Sampled softmax: candidates = target + in-batch targets + NEG_POP
     items (prob ∝ sqrt(train_count)). ~1024 candidates per window.
-  - Per-user window cap (100) IS the power-user de-biasing — no extra
-    weighting (noted in report).
+  - Per-user window cap (100) limits heavy-user dominance in training —
+    no extra weighting (noted in report).
   - Frozen embeddings: E input rows have .detach(), no grad through E.
 """
 import json, os, sys, time
@@ -49,7 +52,7 @@ EVAL_CTX_LEN    = 50            # last N train events for eval context
 RECALL_KS       = [20, 100]
 MRR_K           = 10
 HITRATE_K       = 20
-MAX_USER_WINDOWS = 100          # per-user window cap (de-biasing)
+MAX_USER_WINDOWS = 100          # per-user window cap (limit heavy-user dominance)
 
 # ── EXPECTED VALUES (embedded for sanity checking) ─────────────────────
 EXPECTED = dict(
@@ -375,6 +378,10 @@ def train_ranker(all_ctx, all_tgt, all_len, n_items, neg_probs,
     """Train GRU ranker with sampled softmax loss. Returns trained GRURanker."""
     import torch
 
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     log(f"Training GRU ranker: device={device}, {n_items:,} items")
 
@@ -477,7 +484,7 @@ def evaluate(model, embeddings, offsets, data, user_ids, user_index,
 
     Cohort: up to EVAL_SAMPLE users with >= 10 train events and >= 1 test item.
     Context: last EVAL_CTX_LEN train items → GRU → score all items.
-    Also scores: item2vec (mean embedding), popularity, recent baselines.
+    Also scores: item2vec (mean embedding), popularity, user-frequency baselines.
     Repeats NOT excluded.
     """
     import torch
@@ -503,7 +510,7 @@ def evaluate(model, embeddings, offsets, data, user_ids, user_index,
     log(f"  cohort: {len(eval_users)} users (of {len(eligible)} eligible)")
 
     results = {m: {"overall": [], "repeat": [], "discovery": []}
-               for m in ["ranker", "item2vec", "popularity", "recent"]}
+               for m in ["ranker", "item2vec", "popularity", "user_frequency"]}
 
     # Pre-embed all items on device for ranker scoring
     with torch.no_grad():
@@ -550,7 +557,7 @@ def evaluate(model, embeddings, offsets, data, user_ids, user_index,
         _add_metrics(results["popularity"], pop_rank, test_items,
                      repeat_items, discovery_items)
 
-        # ── recent baseline: user freq desc, ties by popularity asc ──
+        # ── user-frequency baseline: user freq desc, ties by popularity asc ──
         uf = np.bincount(seq, minlength=n_items)
         user_items = np.where(uf > 0)[0]
         order1 = user_items[np.lexsort((pop_pos[user_items], -uf[user_items]))]
@@ -558,7 +565,7 @@ def evaluate(model, embeddings, offsets, data, user_ids, user_index,
         rest_mask[user_items] = False
         ranked_recent = np.concatenate(
             [order1, pop_rank[rest_mask[pop_rank]]])
-        _add_metrics(results["recent"], ranked_recent, test_items,
+        _add_metrics(results["user_frequency"], ranked_recent, test_items,
                      repeat_items, discovery_items)
 
     return {m: _aggregate(v) for m, v in results.items()}
@@ -677,12 +684,21 @@ def _write_reports(results, output_dir):
               "- **Input:** frozen item2vec embeddings (detached, no grad)",
               "- **Loss:** sampled softmax (~1024 candidates: target + "
               "in-batch + popularity-biased negatives)",
-              "- **Per-user window cap:** 100 (power-user de-biasing)",
+              "- **Per-user window cap:** 100 (limits heavy-user dominance "
+              "in training)",
               "", "## Notes", "",
               "- **Context:** last 50 train items (right-padded to SEQ_LEN)",
               "- **Eval:** repeats NOT excluded (legitimate predictions)",
+              "- **Eval type:** set-based — recall/MRR against the full "
+              "test-set of held-out items, not next-item prediction",
+              "- **Primary metric:** discovery (items the user has not "
+              "listened to); overall recall is dominated by repeat "
+              "consumption",
+              "- **Negatives:** in-batch negatives can collide with true "
+              "targets across users (sampled-softmax approximation)",
               "- **Baselines:** item2vec = mean embedding; popularity = "
-              "global count desc; recent = user freq desc, ties by popularity",
+              "global count desc; user_frequency = user freq desc, ties "
+              "by popularity",
               "- **Negatives:** prob ∝ sqrt(train_count)"]
     (output_dir / "reports" / "ranker_report.md").write_text(
         "\n".join(lines), encoding="utf-8")
@@ -738,8 +754,12 @@ def main():
 
     if not events_files:
         sys.exit("FATAL: events.parquet not found under /kaggle/input")
+    if len(events_files) > 1:
+        sys.exit(f"FATAL: multiple events.parquet found, expected exactly one: {events_files}")
     if not vocab_files:
         sys.exit("FATAL: vocab.parquet not found under /kaggle/input")
+    if len(vocab_files) > 1:
+        sys.exit(f"FATAL: multiple vocab.parquet found, expected exactly one: {vocab_files}")
     if not emb_files:
         sys.exit("FATAL: item2vec_final.npy not found under /kaggle/input")
 

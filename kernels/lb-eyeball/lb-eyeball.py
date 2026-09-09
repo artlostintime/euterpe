@@ -1,4 +1,7 @@
 """
+SPDX-License-Identifier: Apache-2.0
+Copyright (c) 2026 Shuvi
+
 Eyeball sanity-check kernel: verify item2vec embeddings semantically.
 
 Anchors = 20 most-listened recordings (vocab is count-sorted, item_id 0..19).
@@ -133,7 +136,15 @@ def run_eyeball(emb_path, vocab_path, out_dir):
     lines = ["# Item2Vec Eyeball Sanity Check", "",
              f"Anchors = {len(anchor_idx)} most-listened recordings; top-{TOP_K} "
              f"cosine neighbors each. Same-artist rate: **{rate:.3f}** "
-             f"({same}/{total}).", ""]
+             f"({same}/{total}).", "",
+             "**Definitions:** the denominator ({}) counts anchor-neighbor "
+             "*pairs* whose artist resolved on both sides; {} of those pairs "
+             "share an artist. `n_resolved` ({}) counts unique recordings "
+             "resolved via the MusicBrainz API (anchors and neighbors "
+             "overlap, so it is not the sum of the two groups); `n_404` "
+             "counts API 404s (deleted/merged recordings). This is a "
+             "qualitative embedding sanity check, not a model "
+             "evaluation.".format(total, same, n_resolved), ""]
     for ai in anchor_idx:
         lines.append(f"## {name(ai)}  ({counts[ai]:,} listens)")
         lines.append("")
@@ -169,8 +180,12 @@ def main():
     vocab_files = list(root.rglob("vocab.parquet"))
     if not emb_files:
         sys.exit("FATAL: item2vec_final.npy not found under /kaggle/input")
+    if len(emb_files) > 1:
+        sys.exit(f"FATAL: multiple item2vec_final.npy found, expected exactly one: {emb_files}")
     if not vocab_files:
         sys.exit("FATAL: vocab.parquet not found under /kaggle/input")
+    if len(vocab_files) > 1:
+        sys.exit(f"FATAL: multiple vocab.parquet found, expected exactly one: {vocab_files}")
 
     log(f"Embeddings: {emb_files[0]}")
     log(f"Vocab:      {vocab_files[0]}")

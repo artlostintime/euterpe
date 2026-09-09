@@ -1,4 +1,7 @@
 """
+SPDX-License-Identifier: Apache-2.0
+Copyright (c) 2026 Shuvi
+
 Phase 2 kernel (Kaggle): sanitize ListenBrainz MLHD+ COMPLETE listening-history shard.
 
 Downloads mlhdplus-complete-f.tar, validates timestamps and IDs, deduplicates,
@@ -111,7 +114,11 @@ tar_path = download_and_verify(MLHD_URL, MLHD_MD5,
 # STEP B: per-user streaming pass
 # ════════════════════════════════════════════════════════════════════════
 log("STEP B: per-user streaming pass")
-NOW = int(time.time()) + FUTURE_SLOP
+# Frozen audit cutoff (2026-09-01 00:00 UTC, fixed before execution) — keeps the
+# future-timestamp acceptance window deterministic across re-runs. The 3
+# future-dated events in the complete shard (2029/2031/2035) exceed any
+# plausible cutoff and remain rejected regardless.
+NOW = 1788220800 + FUTURE_SLOP
 dctx = zstd.ZstdDecompressor()
 
 tf = tarfile.open(str(tar_path), "r:")

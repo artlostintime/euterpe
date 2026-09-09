@@ -1,4 +1,7 @@
 """
+SPDX-License-Identifier: Apache-2.0
+Copyright (c) 2026 Shuvi
+
 Phase 3 kernel (Kaggle): exploratory data analysis on sanitized MLHD+ listens.
 
 Reads lb-sanitize kernel output (listens.parquet, ~1.287B rows).
@@ -49,6 +52,8 @@ tree = "\n".join(f"  {p}" for p in sorted(root.rglob("*")) if p.is_file())
 log(f"/kaggle/input tree:\n{tree}")
 if not candidates:
     sys.exit("FATAL: no listens.parquet found under /kaggle/input")
+if len(candidates) > 1:
+    sys.exit(f"FATAL: multiple listens.parquet found, expected exactly one: {candidates}")
 INPUT_PQ = candidates[0]
 
 
@@ -318,6 +323,9 @@ thresh_rows = "".join(f"| ≥{thr} | {item_stats[f'ge_{thr}']:,} ({item_stats[f'
 {thresh_rows}
 ## Sampled Per-user Distinct/Repeat Stats ({len(sample_users_set)} users)
 
+Diagnostic subsample: the first {SAMPLE_USERS} distinct users in file order
+(parquet is user-sorted), NOT a random sample. Figures are indicative, not estimates.
+
 | Stat | Value |
 |---|---|
 | Mean distinct recordings per user | {sampled_stats['mean_distinct']:,} |
@@ -328,9 +336,9 @@ thresh_rows = "".join(f"| ≥{thr} | {item_stats[f'ge_{thr}']:,} ({item_stats[f'
 
 ## Known Limitations
 
-1. **Sampled per-user stats:** distinct/recording-repeat stats computed on first {SAMPLE_USERS} users only (memory safety). Full-user analysis would require ~O(users × distinct_items) memory.
+1. **Sampled per-user stats (diagnostic subsample):** distinct/recording-repeat stats computed on the first {SAMPLE_USERS} distinct users in file order (parquet is user-sorted), not a random sample (memory safety: full-user analysis would require ~O(users × distinct_items) memory).
 2. **Single shard:** MLHD+ complete-f only; other shards may differ in user distribution and item coverage.
-3. **Year approximation:** year derived from unix timestamp via integer division (365.25 days/year), not timezone-aware.
+3. **Year derivation:** year computed via an exact UTC day-to-year boundary table (calendar.timegm), matching calendar years exactly; UTC only, not timezone-aware.
 """)
 
 summary = {

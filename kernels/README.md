@@ -1,9 +1,11 @@
 # Research kernels
 
 Deterministic Kaggle kernels for the full train/eval pipeline. Each
-folder contains the current source as pushed to Kaggle
-(`kaggle kernels pull shuvitobe/<name>`); each is self-contained and
-pushable as-is.
+folder contains the **audit-corrected** kernel source, identical to the
+frozen versions in the Zenodo archives (byte-identical, SHA-256
+verified). The Kaggle copies (`shuvitobe/lb-*`) are the historical run
+sources and may lag these; this repo and the archives are the
+authoritative versions.
 
 ## Chain
 
@@ -36,8 +38,10 @@ Audit-side kernels (Paper 1): `lb-phase1`, `lb-census`, `lb-crosscheck`,
 
 ## Frozen versions vs. this repo
 
-This folder is the **living** pipeline. The exact kernel versions that
-produced the published results are frozen in the Zenodo archives:
+This folder is the **living** pipeline — and since the audit-corrected
+sync, it matches the frozen archive versions exactly. The exact
+kernel versions that produced the published results are frozen in the
+Zenodo archives:
 
 - Paper 1 (MLHD+ audit): Zenodo DOI 10.5281/zenodo.22338293
 - Paper 2 (behavioral signals): evaluator lb-eval v5.0.0 + evidence v6,

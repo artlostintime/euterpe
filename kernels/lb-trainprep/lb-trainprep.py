@@ -1,4 +1,7 @@
 """
+SPDX-License-Identifier: Apache-2.0
+Copyright (c) 2026 Shuvi
+
 Training-prep kernel: build item vocabulary + per-user temporal splits.
 
 Reads sanitized MLHD+ listens.parquet (~1.29B rows) and produces:
@@ -254,13 +257,9 @@ def run_trainprep(input_path, output_dir):
     last_user        = -1
     user_regressions = 0
 
-    # Sample-based ordering check (100 random users)
-    import random
-    rng = random.Random(42)
-    # Pick 100 users from user_max_ts keys (deterministic)
-    all_users = sorted(user_max_ts.keys())
-    sample_users = set(rng.sample(all_users, min(100, len(all_users))))
-    sample_ts_state = {}   # user -> last_ts seen (for ordering check)
+    # Full per-user ts-order check (vectorized, no sampling)
+    import numpy as _np
+    all_ts_state = {}   # user -> last ts seen
     sample_violations = 0
 
     batch_num = 0
@@ -311,18 +310,18 @@ def run_trainprep(input_path, output_dir):
             user_regressions += 1
         last_user = int(batch_users_unique[-1]) if len(batch_users_unique) > 0 else last_user
 
-        # Sample-based ts ordering check
-        sample_mask = np.isin(users_f, list(sample_users))
-        if sample_mask.any():
-            su = users_f[sample_mask]
-            st = ts_f[sample_mask]
-            for i in range(len(su)):
-                u = int(su[i])
-                t = int(st[i])
-                if u in sample_ts_state:
-                    if t < sample_ts_state[u]:
-                        sample_violations += 1
-                sample_ts_state[u] = t
+        # Full per-user ts-order check (vectorized)
+        su = users_np
+        st = ts_np
+        order = _np.lexsort((_np.arange(len(su)), su))  # stable groupby user, keep row order
+        su_s, st_s = su[order], st[order]
+        bounds = _np.flatnonzero(_np.diff(su_s, prepend=su_s[0] - 1)) - 0
+        starts = _np.concatenate(([0], bounds))
+        ends   = _np.concatenate((bounds, [len(su_s)]))
+        for s, e in zip(starts, ends):
+            seg = st_s[s:e]
+            if _np.any(seg[1:] < seg[:-1]):
+                sample_violations += 1
 
         # Write filtered batch
         out_batch = pa.table({
@@ -358,6 +357,9 @@ def run_trainprep(input_path, output_dir):
     log("  checking split boundaries on sample users...")
     boundary_ok = True
     boundary_violations = 0
+    # 100-user deterministic sample (boundary check only; ts-order is now full-population)
+    import random as _rnd
+    sample_users = set(_rnd.Random(42).sample(sorted(user_max_ts.keys()), 100))
     # Read back only sample users via filters
     pf_out = pq.ParquetFile(str(prep_dir / "events.parquet"))
     user_split_data = defaultdict(lambda: defaultdict(list))  # user -> split -> [ts]
@@ -500,7 +502,7 @@ def run_trainprep(input_path, output_dir):
 | Check | Result |
 |-------|--------|
 | User-ID regressions across batches | {user_regressions} {"OK" if user_regressions == 0 else "FAIL"} |
-| TS ordering violations (100-user sample) | {sample_violations} {"OK" if sample_violations == 0 else "FAIL"} |
+| TS ordering violations (all users, full check) | {sample_violations} {"OK" if sample_violations == 0 else "FAIL"} |
 | Split boundary violations (100-user sample) | {boundary_violations} {"OK" if boundary_ok else "FAIL"} |
 
 ## Split Definitions
@@ -563,6 +565,8 @@ def main():
     log(f"/kaggle/input tree:\n{tree}")
     if not candidates:
         sys.exit("FATAL: listens.parquet not found under /kaggle/input")
+    if len(candidates) > 1:
+        sys.exit(f"FATAL: multiple listens.parquet found, expected exactly one: {candidates}")
     run_trainprep(candidates[0], Path("/kaggle/working"))
 
 

@@ -1,4 +1,7 @@
 """
+SPDX-License-Identifier: Apache-2.0
+Copyright (c) 2026 Shuvi
+
 Item2Vec (SGNS) training kernel: learn 64-dim embeddings + evaluation.
 
 Trains Skip-Gram with Negative Sampling on user listening sequences.
@@ -251,6 +254,10 @@ def train_sgns(offsets, data, keep_probs, n_items, output_dir,
     import torch
     import torch.nn.functional as F
 
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     log(f"Training SGNS: device={device}, {n_items:,} items, dim={emb_dim}")
 
@@ -368,8 +375,8 @@ def evaluate(embeddings, offsets, data, user_ids, user_index, train_counts,
     Cohort: up to EVAL_SAMPLE users with >= 10 train events and >= 1 test item.
     Context: mean of last EVAL_CTX_LEN train embeddings (uniform).
     Score: cosine sim vs all items; repeats NOT excluded.
-    Baselines: popularity (global count desc), recent (user freq desc,
-    ties by global popularity).
+    Baselines: popularity (global count desc), user-frequency (user freq
+    desc, ties by global popularity).
     """
     log("Evaluation")
     norm_emb = embeddings / (
@@ -392,7 +399,7 @@ def evaluate(embeddings, offsets, data, user_ids, user_index, train_counts,
 
     results = {"item2vec": {"overall": [], "repeat": [], "discovery": []},
                "popularity": {"overall": [], "repeat": [], "discovery": []},
-               "recent": {"overall": [], "repeat": [], "discovery": []}}
+               "user_frequency": {"overall": [], "repeat": [], "discovery": []}}
 
     for u in eval_users:
         i = user_index[u]
@@ -421,7 +428,7 @@ def evaluate(embeddings, offsets, data, user_ids, user_index, train_counts,
         _add_metrics(results["popularity"], pop_rank, test_items,
                      repeat_items, discovery_items)
 
-        # ── recent baseline: user freq desc, ties by popularity asc ──
+        # ── user-frequency baseline: user freq desc, ties by popularity asc ──
         uf = np.bincount(seq, minlength=n_items)
         user_items = np.where(uf > 0)[0]
         order1 = user_items[np.lexsort((pop_pos[user_items], -uf[user_items]))]
@@ -429,7 +436,7 @@ def evaluate(embeddings, offsets, data, user_ids, user_index, train_counts,
         rest_mask[user_items] = False
         ranked_recent = np.concatenate(
             [order1, pop_rank[rest_mask[pop_rank]]])
-        _add_metrics(results["recent"], ranked_recent, test_items,
+        _add_metrics(results["user_frequency"], ranked_recent, test_items,
                      repeat_items, discovery_items)
 
     return {m: _aggregate(v) for m, v in results.items()}
@@ -542,7 +549,12 @@ def _write_reports(results, output_dir):
               "- **Subsampling:** t=1e-3 — effectively no-op on this corpus "
               "(only items with >~2M listens affected).",
               "- **Baselines:** popularity = global count desc; "
-              "recent = user freq desc, ties by popularity."]
+              "user_frequency = user freq desc, ties by popularity.",
+              "- **Eval type:** set-based — recall/MRR against the full "
+              "test-set of held-out items, not next-item prediction.",
+              "- **Primary metric:** discovery (items the user has not "
+              "listened to); overall recall is dominated by repeat "
+              "consumption."]
     (output_dir / "reports" / "eval_report.md").write_text(
         "\n".join(lines), encoding="utf-8")
     log("  wrote reports/eval_report.md")
@@ -585,8 +597,12 @@ def main():
 
     if not events_files:
         sys.exit("FATAL: events.parquet not found under /kaggle/input")
+    if len(events_files) > 1:
+        sys.exit(f"FATAL: multiple events.parquet found, expected exactly one: {events_files}")
     if not vocab_files:
         sys.exit("FATAL: vocab.parquet not found under /kaggle/input")
+    if len(vocab_files) > 1:
+        sys.exit(f"FATAL: multiple vocab.parquet found, expected exactly one: {vocab_files}")
 
     log(f"Events: {events_files[0]}")
     log(f"Vocab:  {vocab_files[0]}")
